@@ -4,7 +4,7 @@ import com.example.hotel_booking_app.exception.PhotoRetrievalException;
 import com.example.hotel_booking_app.exception.ResourceNotFoundException;
 import com.example.hotel_booking_app.model.BookedRoom;
 import com.example.hotel_booking_app.model.Room;
-import com.example.hotel_booking_app.response.BookingResponse;
+import com.example.hotel_booking_app.response.BookedResponse;
 import com.example.hotel_booking_app.response.RoomResponse;
 import com.example.hotel_booking_app.service.IRoomService;
 import com.example.hotel_booking_app.service.Impl.BookedRoomServiceImpl;
@@ -15,6 +15,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
+import org.springframework.format.annotation.DateTimeFormat;
 
 import javax.sql.rowset.serial.SerialBlob;
 import java.io.IOException;
@@ -24,6 +25,8 @@ import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.time.LocalDate;
+
 
 @CrossOrigin
 @RestController
@@ -89,6 +92,29 @@ public class RoomController {
         return ResponseEntity.ok(roomResponse);
     }
 
+    @GetMapping("/available-rooms")
+    public ResponseEntity<List<RoomResponse>> getAvailableRooms(
+            @RequestParam("checkInDate") @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)LocalDate checkInDate,
+            @RequestParam("checkOutDate") @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)LocalDate checkOutDate,
+            @RequestParam("roomType") String roomType) throws SQLException {
+        List<Room> availableRooms = roomService.getAvailableRooms(checkInDate, checkOutDate, roomType);
+        List<RoomResponse> roomResponses = new ArrayList<>();
+        for (Room room : availableRooms){
+            byte[] photoBytes = roomService.getRoomPhotoByRoomId(room.getId());
+            if (photoBytes != null && photoBytes.length > 0){
+                String photoBase64 = Base64.encodeBase64String(photoBytes);
+                RoomResponse roomResponse = getRoomResponse(room);
+                roomResponse.setPhoto(photoBase64);
+                roomResponses.add(roomResponse);
+            }
+        }
+        if(roomResponses.isEmpty()){
+            return ResponseEntity.noContent().build();
+        }else{
+            return ResponseEntity.ok(roomResponses);
+        }
+    }
+
     @GetMapping("/room/{roomId}")
     public ResponseEntity<Optional<RoomResponse>> getRoomById(@PathVariable Long roomId){
         Optional<Room> theRoom = roomService.getRoomById(roomId);
@@ -100,9 +126,9 @@ public class RoomController {
 
     private RoomResponse getRoomResponse(Room room) {
         List<BookedRoom> bookings = getAllBookingsByRoomId(room.getId());
-        List<BookingResponse> bookingInfo = bookings
+        List<BookedResponse> bookingInfo = bookings
                 .stream()
-                .map(booking -> new BookingResponse(booking.getBookingId(),
+                .map(booking -> new BookedResponse(booking.getBookingId(),
                         booking.getCheckInDate(),
                         booking.getCheckOutDate(), booking.getBookingConfirmationCode())).toList();
         byte[] photoBytes = null;
